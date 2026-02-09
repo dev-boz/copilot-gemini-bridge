@@ -1,0 +1,43 @@
+{
+  "name": "copilot-gemini-bridge",
+  "version": "1.0.0",
+  "description": "MCP server bridging GPT-5.2 (via Copilot SDK) with Gemini for token arbitrage",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "copilot-gemini-bridge": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc && node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "copilot",
+    "gemini",
+    "bridge",
+    "token-arbitrage"
+  ],
+  "author": "dev-boz",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dev-boz/copilot-gemini-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dev-boz/copilot-gemini-bridge/issues"
+  },
+  "homepage": "https://github.com/dev-boz/copilot-gemini-bridge#readme",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^0.1.23",
+    "@modelcontextprotocol/sdk": "^0.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}
