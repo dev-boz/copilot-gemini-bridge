@@ -75,8 +75,8 @@ const DEFAULT_TIMEOUT = Number(process.env.COPILOT_TIMEOUT) || 300_000;
 // separate MCP tools and don't need to be listed here.
 const GEMINI_TOOL_ALLOWLIST = process.env.GEMINI_TOOLS
   ? process.env.GEMINI_TOOLS.split(",")
-      .map((t) => t.trim())
-      .filter(Boolean)
+    .map((t) => t.trim())
+    .filter(Boolean)
   : ["ask-gemini", "brainstorm", "fetch-chunk"];
 
 // Gemini model to use. Override: GEMINI_MODEL
@@ -273,7 +273,7 @@ async function runBridge(options: BridgeOptions): Promise<string> {
 
     log("INFO", `Session created: ${session.sessionId}`);
 
-    // Track events for debugging
+    // Track tool calls for debugging
     const events: string[] = [];
     session.on("tool.execution_start", (event) => {
       const toolName = event.data.toolName;
@@ -384,7 +384,7 @@ Gemini handles the heavy lifting (request-based pricing) while GPT synthesizes.`
               context: {
                 type: "string",
                 description:
-                  "Optional additional context (code snippets, file contents, etc.) to include with the prompt.",
+                  "Optional additional context. To include file contents, ask Copilot to 'read file /path/to/file' in the prompt.",
               },
               timeout: {
                 type: "number",
@@ -522,8 +522,7 @@ async function main() {
   log("INFO", `Gemini MCP tool allowlist: ${GEMINI_TOOL_ALLOWLIST.join(", ")}`);
   log(
     "INFO",
-    `Copilot write access: ${DEFAULT_WRITE_ACCESS}${
-      DEFAULT_WRITE_ACCESS ? "" : ` (excluded: ${WRITE_TOOLS.join(", ")})`
+    `Copilot write access: ${DEFAULT_WRITE_ACCESS}${DEFAULT_WRITE_ACCESS ? "" : ` (excluded: ${WRITE_TOOLS.join(", ")})`
     }`
   );
 
