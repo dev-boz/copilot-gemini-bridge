@@ -1,13 +1,13 @@
 # copilot-gemini-bridge
 
-MCP server that bridges GPT-5.2 (via GitHub Copilot SDK) with Gemini for token arbitrage.
+MCP server that bridges GPT-5.3 Codex (via GitHub Copilot SDK) with Gemini for token arbitrage.
 
 ## Architecture
 
 ```
 Claude Code (Opus)
   → calls "ask-copilot-with-gemini" tool on this MCP server
-    → Copilot SDK creates GPT-5.2 session (singleton client, per-request sessions)
+    → Copilot SDK creates GPT-5.3 Codex session (singleton client, per-request sessions)
       → GPT has Gemini available as an MCP tool (restricted allowlist)
       → GPT autonomously decides when to delegate to Gemini
       → Gemini handles heavy lifting (request-based pricing = cheap tokens)
@@ -50,15 +50,15 @@ Once registered, use from Claude Code:
 Use ask-copilot-with-gemini to analyze this codebase for security issues
 ```
 
-GPT-5.2 will automatically delegate to Gemini for heavy analysis, then synthesize findings.
+GPT-5.3 Codex will automatically delegate to Gemini for heavy analysis, then synthesize findings.
 
 ## Tool Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `prompt` | string | Yes | - | The prompt to send to GPT-5.2 |
-| `model` | string | No | `gpt-5.2` | Copilot model to orchestrate with |
-| `reasoningEffort` | string | No | `high` | Reasoning effort: `low`, `medium`, `high`, `xhigh` |
+| `prompt` | string | Yes | - | The prompt to send to GPT-5.3 Codex |
+| `model` | string | No | `gpt-5.3-codex` | Copilot model to orchestrate with |
+| `reasoningEffort` | string | No | `high` | Reasoning effort: `low`, `medium`, `high`, `xhigh` (model-dependent, see below) |
 | `geminiModel` | string | No | `auto-gemini-3` | Which Gemini model to use for delegated work |
 | `context` | string | No | - | Additional context (code snippets, file contents) |
 | `timeout` | number | No | `300000` | Timeout in ms |
@@ -68,14 +68,18 @@ GPT-5.2 will automatically delegate to Gemini for heavy analysis, then synthesiz
 
 ### Copilot (orchestrator)
 
-| Model | Description |
-|-------|-------------|
-| `gpt-5.2` | Latest, best reasoning (default) |
-| `gpt-5.2-codex` | Optimized for code |
-| `gpt-5.1` / `gpt-5.1-codex` | Previous gen |
-| `gpt-5.1-codex-mini` | Lightweight codex |
-| `gpt-5` / `gpt-5-mini` | Older gen |
-| `gpt-4.1` | Legacy |
+| Model | Reasoning effort | Description |
+|-------|-----------------|-------------|
+| `gpt-5.3-codex` | none | Latest codex, autonomous reasoning (default) |
+| `gpt-5.2` | low, medium, high | Latest non-codex, best configurable reasoning |
+| `gpt-5.2-codex` | low, medium, high, xhigh | Code-optimized with full reasoning range |
+| `gpt-5.1-codex-max` | low, medium, high, xhigh | Max-tier previous gen codex |
+| `gpt-5.1` / `gpt-5.1-codex` | low, medium, high | Previous gen |
+| `gpt-5.1-codex-mini` | low, medium, high | Lightweight codex |
+| `gpt-5` / `gpt-5-mini` | low, medium, high | Older gen |
+| `gpt-4.1` | none | Legacy |
+
+Reasoning effort support is auto-detected at startup via `listModels()`. If a requested level isn't supported by the chosen model, it's automatically clamped to a valid level.
 
 ### Gemini (delegated heavy lifting)
 
@@ -95,7 +99,7 @@ All defaults can be overridden via environment variables. Set them in your shell
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `COPILOT_MODEL` | `gpt-5.2` | Default Copilot model |
+| `COPILOT_MODEL` | `gpt-5.3-codex` | Default Copilot model |
 | `COPILOT_REASONING_EFFORT` | `high` | Default reasoning effort (`low`/`medium`/`high`/`xhigh`) |
 | `COPILOT_TIMEOUT` | `300000` | Default timeout in ms |
 | `COPILOT_WRITE_ACCESS` | `true` | Allow Copilot write tools (`true`/`false`) |

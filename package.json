@@ -1,7 +1,7 @@
 {
   "name": "copilot-gemini-bridge",
   "version": "1.0.0",
-  "description": "MCP server bridging GPT-5.2 (via Copilot SDK) with Gemini for token arbitrage",
+  "description": "MCP server bridging GPT-5.3 Codex (via Copilot SDK) with Gemini for token arbitrage",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

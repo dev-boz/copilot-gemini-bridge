@@ -2,13 +2,13 @@
 /**
  * copilot-gemini-bridge MCP Server
  *
- * Bridges Claude (Opus) → GPT-5.2 (via Copilot SDK) → Gemini (via gemini-mcp-tool)
- * GPT-5.2 autonomously decides when to delegate heavy lifting to Gemini.
+ * Bridges Claude (Opus) → GPT-5.3 Codex (via Copilot SDK) → Gemini (via gemini-mcp-tool)
+ * GPT-5.3 Codex autonomously decides when to delegate heavy lifting to Gemini.
  *
  * Architecture:
  *   Claude Code (Opus)
  *     → calls this MCP server's "ask-copilot-with-gemini" tool
- *       → Copilot SDK spawns GPT-5.2 session with Gemini as available MCP tool
+ *       → Copilot SDK spawns GPT-5.3 Codex session with Gemini as available MCP tool
  *         → GPT autonomously calls Gemini when beneficial
  *       → GPT synthesizes and returns response to Opus
  */
@@ -24,7 +24,32 @@ import { existsSync } from "fs";
 const GEMINI_MCP_PATH = process.env.GEMINI_MCP_PATH ||
     resolve(homedir(), "mcp-servers/gemini-mcp-tool/dist/index.js");
 // Default model for the Copilot session. Override: COPILOT_MODEL
-const DEFAULT_MODEL = process.env.COPILOT_MODEL || "gpt-5.2";
+const DEFAULT_MODEL = process.env.COPILOT_MODEL || "gpt-5.3-codex";
+// Per-model reasoning effort support, populated from listModels() at startup.
+// Maps model ID → array of supported levels, or undefined if not yet loaded.
+// Models not in this map are assumed to NOT support reasoning effort.
+let modelReasoningMap = new Map();
+let modelReasoningLoaded = false;
+async function loadModelReasoningSupport(client) {
+    if (modelReasoningLoaded)
+        return;
+    try {
+        const models = await client.listModels();
+        for (const m of models) {
+            if (m.supportedReasoningEfforts && m.supportedReasoningEfforts.length > 0) {
+                modelReasoningMap.set(m.id, m.supportedReasoningEfforts);
+            }
+        }
+        modelReasoningLoaded = true;
+        log("INFO", `Loaded reasoning support for ${modelReasoningMap.size} models: ${[...modelReasoningMap.entries()].map(([id, levels]) => `${id}=[${levels}]`).join(", ")}`);
+    }
+    catch (error) {
+        log("WARN", `Failed to load model info: ${error instanceof Error ? error.message : error}. Reasoning effort will be skipped for safety.`);
+    }
+}
+function getModelReasoningLevels(model) {
+    return modelReasoningMap.get(model);
+}
 // Default reasoning effort (low/medium/high/xhigh). Override: COPILOT_REASONING_EFFORT
 const VALID_REASONING_EFFORTS = [
     "low",
@@ -122,6 +147,7 @@ async function getClient() {
         await client.start();
         singletonClient = client;
         log("INFO", "CopilotClient started");
+        await loadModelReasoningSupport(client);
         return client;
     })();
     try {
@@ -153,7 +179,15 @@ async function shutdownClient() {
 }
 async function runBridge(options) {
     const { prompt, model = DEFAULT_MODEL, reasoningEffort = DEFAULT_REASONING_EFFORT, geminiModel = DEFAULT_GEMINI_MODEL, context, timeout = DEFAULT_TIMEOUT, writeAccess = DEFAULT_WRITE_ACCESS, } = options;
-    log("INFO", `Starting bridge: model=${model}, reasoning=${reasoningEffort}, gemini=${geminiModel}, write=${writeAccess}, timeout=${timeout}ms`);
+    const supportedLevels = getModelReasoningLevels(model);
+    const supportsReasoning = !!supportedLevels;
+    // Clamp reasoning effort to what the model actually supports
+    const effectiveEffort = supportsReasoning && supportedLevels.includes(reasoningEffort)
+        ? reasoningEffort
+        : supportsReasoning
+            ? supportedLevels[Math.floor(supportedLevels.length / 2)] // pick middle level as fallback
+            : undefined;
+    log("INFO", `Starting bridge: model=${model}, reasoning=${effectiveEffort ?? "n/a"}, gemini=${geminiModel}, write=${writeAccess}, timeout=${timeout}ms`);
     // Build the full prompt with optional context
     const fullPrompt = context
         ? `${prompt}\n\n--- Additional Context ---\n${context}`
@@ -172,7 +206,7 @@ async function runBridge(options) {
         // Create session with model and Gemini as available MCP server
         session = await client.createSession({
             model,
-            reasoningEffort,
+            ...(effectiveEffort ? { reasoningEffort: effectiveEffort } : {}),
             ...(writeAccess ? {} : { excludedTools: WRITE_TOOLS }),
             systemMessage: {
                 mode: "append",
@@ -206,7 +240,7 @@ async function runBridge(options) {
             }),
         });
         log("INFO", `Session created: ${session.sessionId}`);
-        // Track events for debugging
+        // Track tool calls for debugging
         const events = [];
         session.on("tool.execution_start", (event) => {
             const toolName = event.data.toolName;
@@ -266,7 +300,7 @@ server.setRequestHandler(ListToolsRequestSchema, async (_request) => {
         tools: [
             {
                 name: "ask-copilot-with-gemini",
-                description: `Send a prompt to GPT-5.2 which has autonomous access to Gemini's tools.
+                description: `Send a prompt to GPT-5.3 Codex which has autonomous access to Gemini's tools.
 GPT will decide when to delegate to Gemini for heavy lifting (large context analysis,
 web search, summarization, brainstorming). Returns GPT's synthesized response.
 Use this for complex analysis tasks where token arbitrage is beneficial -
@@ -276,11 +310,11 @@ Gemini handles the heavy lifting (request-based pricing) while GPT synthesizes.`
                     properties: {
                         prompt: {
                             type: "string",
-                            description: "The prompt/question to send to GPT-5.2. Be specific about what you want analyzed.",
+                            description: "The prompt/question to send to GPT-5.3 Codex. Be specific about what you want analyzed.",
                         },
                         model: {
                             type: "string",
-                            description: `Model to use. Default: ${DEFAULT_MODEL}. Options: gpt-5.2, gpt-5.2-codex, gpt-5.1, gpt-5.1-codex, gpt-5, gpt-4.1`,
+                            description: `Model to use. Default: ${DEFAULT_MODEL}. Options: gpt-5.3-codex, gpt-5.2, gpt-5.2-codex, gpt-5.1, gpt-5.1-codex, gpt-5, gpt-4.1`,
                             default: DEFAULT_MODEL,
                         },
                         reasoningEffort: {
@@ -297,7 +331,7 @@ Gemini handles the heavy lifting (request-based pricing) while GPT synthesizes.`
                         },
                         context: {
                             type: "string",
-                            description: "Optional additional context (code snippets, file contents, etc.) to include with the prompt.",
+                            description: "Optional additional context. To include file contents, ask Copilot to 'read file /path/to/file' in the prompt.",
                         },
                         timeout: {
                             type: "number",
